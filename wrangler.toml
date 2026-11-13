@@ -1,0 +1,128 @@
+name = "chore-dashboard"
+main = "src/index.ts"
+compatibility_date = "2026-08-22"
+
+routes = [
+  { pattern = "chores.example.com", custom_domain = true }
+]
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[vars]
+KIDS_PROJECT_ID = "YOUR_TODOIST_PROJECT_ID"
+# "Name:#hexcolor" pairs, comma-separated. This is the single config point for
+# who the dashboard shows — the exact Todoist label a kid's chores must be tagged
+# with, the JSON/digest key (lowercased name), and the column's accent color.
+# Add/remove/rename kids by editing this one line; nothing else in the app
+# hardcodes names. See parseKids() in src/index.ts.
+KIDS = "Alex:#4d9bff,Sam:#4dd68a,Taylor:#ffb14d"
+# "HH:MM" (24h, in the app's America/New_York timezone) — the single boundary
+# between the dashboard's Day and Evening tabs. Day is [00:00, this), Evening is
+# [this, 24:00) — the whole day is covered, no gap. Sent to the frontend as
+# eveningStartsAtMinutes (see handleGetChores in src/index.ts) so the tab labels
+# and filtering are driven by this one value, not hardcoded in public/app.js.
+EVENING_STARTS_AT = "16:00"
+
+# Fully Kiosk integration (optional, off by default) — see README's "Fully
+# Kiosk integration" section and CLAUDE.md for what each of these controls.
+# Plain vars, not secrets: nothing here is sensitive, and threading them
+# through the API response (like EVENING_STARTS_AT above) keeps every
+# deploy-time config value in wrangler.toml instead of split across two files.
+USE_FULLY_KIOSK = "true"               # master switch — nothing below does anything unless this is "true" AND the browser exposes window.fully
+FULLY_BRIGHTNESS_ENABLED = "true"      # dim the screen at night, via the same sun-based day/night signal that drives the theme
+FULLY_DAY_BRIGHTNESS = "100"           # percent, 0-100
+FULLY_NIGHT_BRIGHTNESS = "30"
+FULLY_DAY_KEEPAWAKE_ENABLED = "true"   # force the screen to never time out while it's the app's "day"
+FULLY_NIGHT_SCHEDULE_ENABLED = "true"  # turn the screen off overnight, waking on motion for a grace period
+FULLY_NIGHT_SCREEN_OFF_AT = "23:00"    # HH:MM, 24h, TIMEZONE (America/New_York)
+FULLY_NIGHT_SCREEN_ON_AT = "05:00"
+FULLY_MOTION_WAKE_GRACE_MINUTES = "2"  # how long the screen stays on after the last detected motion
+
+# Weather location (Open-Meteo, see updateWeather() in public/app.js) —
+# previously a hardcoded pair of constants in app.js, moved here so every
+# piece of deploy-time config lives in one file. Defaults to New York, NY
+# (40.7128, -74.006) if unset. Find new coordinates via Open-Meteo's geocoding API:
+# https://open-meteo.com/en/docs/geocoding-api
+WEATHER_LAT = "40.7128"
+WEATHER_LON = "-74.006"
+
+# Auto chore skipping (all optional, all OFF by default). A cron just after local
+# midnight (MIDNIGHT_SKIP_CRON in src/index.ts) closes chores that don't need
+# doing that day, then a ~9am Telegram heads-up (SKIP_NOTIFY_HOUR) so nobody's
+# phone buzzes at midnight; the nightly digest also notes each skip. Server-side
+# behavior, so unlike the FULLY_*/WEATHER_* vars none of this is threaded through
+# /api/chores. See parseRainSkipConfig()/parseSchoolSkipConfig()/runAutoSkip().
+#
+# Rain-aware: checks the day's precipitation forecast (Open-Meteo, same location
+# as WEATHER_LAT/WEATHER_LON above) and, on a properly wet day, closes any chore
+# whose title matches RAIN_SKIP_MATCH that's due that day — "the rain did it".
+RAIN_SKIP_ENABLED = "true"            # master switch — nothing below does anything unless this is "true"
+RAIN_SKIP_MATCH = "Water the Yard, Water the back yard, Water the front yard"  # comma-separated, case-insensitive title substrings; a chore matching ANY entry is eligible
+RAIN_SKIP_MIN_HOURS = "6"             # require forecast precipitation_hours strictly greater than this
+RAIN_SKIP_MIN_MM = "5"                # AND require forecast precipitation_sum (mm) to be at least this
+RAIN_SKIP_COUNTS_AS_DONE = "true"     # also count the auto-close toward the nightly digest's "done" tally
+
+# Calendar-aware: on a district no-school day, closes any chore carrying the
+# SCHOOL_SKIP_LABEL Todoist label that's due that day. The no-school dates come
+# from public/school-calendar.json (regenerate with
+# `node scripts/refresh-school-calendar.mjs`) — or SCHOOL_SKIP_CALENDAR_URL if
+# set — unioned with a runtime manual flag (POST /api/school-skip/today, for a
+# snow day the calendar doesn't know about).
+SCHOOL_SKIP_ENABLED = "true"          # master switch
+SCHOOL_SKIP_LABEL = "school-day"      # Todoist label marking a chore school-day-only
+SCHOOL_SKIP_COUNTS_AS_DONE = "false"  # a holiday isn't an accomplishment (streak is protected either way)
+# SCHOOL_SKIP_CALENDAR_URL = "https://example.com/district-calendar.ics"  # optional: fetch live instead of the bundled file (needs an ICS→JSON step; unset = bundled file)
+
+SKIP_NOTIFY_HOUR = "9"               # local hour (0-23) the deferred rain/school skip Telegram notice may first send at
+
+# Weather-triggered snow-day reminder (optional). On a would-be school day whose
+# forecast turns wintry it sends ONE Telegram nudge to flag the day manually if
+# school closes — it never skips anything on its own (a snow day is the
+# district's call). See maybeSendSnowReminder() in src/index.ts.
+SNOW_REMINDER_ENABLED = "true"        # master switch
+SNOW_REMINDER_HOUR = "6"              # local hour (0-23) — snow-day calls are usually made ~5-6am
+SNOW_REMINDER_MIN_CM = "1"            # snowfall_sum (cm) at/above this — or a wintry weather_code — triggers the nudge
+
+[[kv_namespaces]]
+binding = "FAILURE_STATE"
+id = "YOUR_KV_NAMESPACE_ID"
+
+# Optional — unbound means avatar photos are unavailable and every kid shows
+# the colored-initial fallback (see buildAvatar() in public/app.js). One JPEG
+# per kid, uploaded via `wrangler r2 object put chore-dashboard-avatars/
+# <kidKey>.jpg --file=<path> --content-type=image/jpeg` (kidKey is the kid's
+# lowercased name, e.g. "alex" — see parseKids() in src/index.ts). Served
+# through GET /api/avatars/:kidKey, gated by the same ?key=DASH_SECRET check
+# as every other route — deliberately not a plain public/ static file, since
+# those bypass the Worker/auth entirely (see CLAUDE.md).
+[[r2_buckets]]
+binding = "AVATARS"
+bucket_name = "chore-dashboard-avatars"
+
+# Three cron entries, distinguished in src/index.ts's `scheduled` handler by
+# matching on the exact strings below (DIGEST_CRON / MIDNIGHT_SKIP_CRON) —
+# anything else is treated as the heartbeat check:
+#   "0 0 * * *"   — nightly chore digest. Cloudflare Cron Triggers run in UTC only,
+#                   so this fixed UTC hour drifts by an hour across the two DST
+#                   transitions each year (currently 8pm America/New_York in
+#                   EDT; 7pm once EST resumes) — cosmetic, not worth chasing with a
+#                   timezone-aware cron expression.
+#   "15 5 * * *"  — auto chore skip (MIDNIGHT_SKIP_CRON). 00:15 EST / 01:15 EDT —
+#                   always just after local midnight, same calendar day year-round.
+#                   Runs both the rain-aware and the calendar-aware (no-school)
+#                   skip; each is a no-op unless its own *_ENABLED var is "true".
+#   "*/15 * * * *" — dead-tablet check: alerts once via Telegram if no authenticated
+#                    request has reached the Worker in 30+ minutes (see
+#                    HEARTBEAT_STALE_MS in src/index.ts). This tick also delivers the
+#                    skip features' deferred (~9am) Telegram notices and the
+#                    weather-triggered snow-day reminder.
+[triggers]
+crons = ["0 0 * * *", "15 5 * * *", "*/15 * * * *"]
+
+# Secrets (never put these here — set them with `wrangler secret put`):
+#   TODOIST_TOKEN      — Todoist personal API token (Settings -> Integrations -> Developer)
+#   DASH_SECRET        — shared secret the kiosk must pass as ?key=... on every request
+#   TELEGRAM_BOT_TOKEN — optional; unset = no Telegram notifications (completions, digest, alerts)
+#   TELEGRAM_CHAT_ID   — optional; the group chat to notify (must be paired with the above)

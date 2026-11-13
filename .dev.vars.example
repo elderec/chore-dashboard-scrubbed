@@ -1,0 +1,14 @@
+# Copy to .dev.vars (gitignored) for local `wrangler dev` testing.
+TODOIST_TOKEN=your_todoist_personal_api_token_here
+DASH_SECRET=pick_any_random_string_here
+
+# Optional — leave unset to disable Telegram notifications locally.
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
+TELEGRAM_CHAT_ID=your_telegram_group_chat_id_here
+
+# Optional — not read by the Worker at all. Purely so Claude Code can reload the
+# physical kiosk tablet's browser after verifying a deploy, via the Fully Kiosk
+# Browser Remote Admin REST API (in the Fully Kiosk app: Settings -> Remote
+# Administration). Leave unset and Claude will just skip that step and say so.
+FULLY_KIOSK_URL=http://<tablet-ip>:2323/
+FULLY_KIOSK_PW=your_fully_kiosk_remote_admin_password_here

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!-- Static shell only — every column, card, and header value is built/filled
+         in by app.js from the /api/chores response; there's nothing kid- or
+         chore-specific in this markup. Styling is style.css. See CLAUDE.md for
+         why these are three plain files instead of one (no build step either way). -->
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <!-- Tells the browser/WebView this page manages its own light/dark palette, so
+         Android WebView's "Force Dark" algorithm doesn't recolor it to dark on top of
+         the data-theme="light" app.js already set (confirmed on the actual kiosk
+         tablet: the page briefly painted light on load, then got force-darkened back).
+         The color-scheme CSS property on :root, set per-theme in style.css, reinforces this. -->
+    <meta name="color-scheme" content="light dark" />
+    <!-- This is a private tool on a public custom domain, not something
+         meant to turn up in search results. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Chore Chart</title>
+    <!-- Emoji favicon via an inline SVG data URI — no separate image asset to manage. -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📋</text></svg>"
+    />
+    <!-- Warms up the connection to the one third-party origin this app calls
+         (see updateWeather() in app.js) before it's actually needed. -->
+    <link rel="preconnect" href="https://api.open-meteo.com" />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>Chore Chart</h1>
+        <div class="slot-row" id="slot-row"></div>
+        <div class="header-right">
+          <div id="status-banner" aria-live="polite" aria-atomic="true">
+            <span class="dot"></span><span>Reconnecting…</span>
+          </div>
+          <div id="weather"></div>
+          <div id="date">--</div>
+          <div id="clock">--:--</div>
+        </div>
+      </header>
+      <div id="board">
+        <div id="board-loading">Loading chores…</div>
+      </div>
+    </div>
+
+    <div id="action-toast" role="alert" aria-live="assertive"></div>
+    <script src="/app.js"></script>
+  </body>
+</html>

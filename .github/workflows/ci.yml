@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancels a run still in progress when a newer commit lands on the same branch/PR —
+# without this, pushing twice in quick succession (or a PR plus an immediate
+# follow-up push) burns a full run's worth of free-tier minutes on a result that's
+# about to be superseded anyway. NOT applied to main: cancelling an in-flight
+# `deploy` mid-`wrangler deploy` is a real-world-outcome risk a few minutes of CI
+# time isn't worth avoiding — a second push to main while one is still deploying
+# instead queues behind it (still serialized, just not by cancellation).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # A hung step here (e.g. a stuck e2e test) would otherwise run until GitHub's
+    # default 360-minute job cap — real money/minutes on a free-tier account for a
+    # job that normally finishes in ~1 minute.
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # dorny/paths-filter calls the GitHub API to list a PR's changed files on
+      # pull_request events (no local diff is possible against an arbitrary base);
+      # without this it 403s with "Resource not accessible by integration". Only
+      # surfaced once something actually opened a PR against main instead of
+      # pushing straight to it (a Renovate PR, in this case).
+      pull-requests: read
+    outputs:
+      deploy-relevant: ${{ steps.filter.outputs.deploy-relevant }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            deploy-relevant:
+              - 'src/**'
+              - 'public/**'
+              - 'wrangler.toml'
+              # package.json/lock rarely matter today (this project has zero
+              # runtime dependencies -- see CLAUDE.md), but a devDependency-only
+              # bump costing one harmless extra deploy is a much smaller risk than
+              # a future *runtime* dependency bump silently skipping one.
+              - 'package.json'
+              - 'package-lock.json'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      # Free-tier GitHub Actions minutes are worth conserving, and the Chromium
+      # binary download (not the apt-installed OS libs, which are fast/idempotent
+      # either way) is the slow part of `playwright install --with-deps` — caching
+      # it keyed on package-lock.json (bumps whenever @playwright/test's resolved
+      # version changes) skips that download on every run after the first.
+      - name: Cache Playwright browser binaries
+        id: playwright-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+      - name: Install Playwright browser + OS deps (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - name: Install Playwright OS deps only (browser already cached)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      - run: npm run test:e2e
+
+  deploy:
+    needs: test
+    # Skip on pushes that only touch docs/config unrelated to what's actually
+    # deployed (README, CLAUDE.md, tests, CI itself, etc.) — deploying the same
+    # Worker content twice in a row is harmless but pointless.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.test.outputs.deploy-relevant == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Only needs to check out the repo — no reason to inherit whatever broader
+    # default permissions the repo/org has configured, same least-privilege
+    # reasoning as the explicit block on the test job above.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
