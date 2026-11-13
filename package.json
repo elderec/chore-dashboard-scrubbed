@@ -14,16 +14,16 @@
     "format:check": "prettier --check ."
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20261005.1",
+    "@cloudflare/workers-types": "^5.20261110.1",
     "@eslint/js": "^10.0.1",
-    "@playwright/test": "^1.63.0",
-    "eslint": "^10.12.0",
+    "@playwright/test": "^1.65.0",
+    "eslint": "^10.14.0",
     "eslint-config-prettier": "^10.1.8",
-    "globals": "^17.13.0",
-    "prettier": "^3.9.9",
+    "globals": "^17.14.0",
+    "prettier": "^3.9.10",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.71.0",
-    "vitest": "^5.0.3",
-    "wrangler": "4.149.0"
+    "typescript-eslint": "^8.72.2",
+    "vitest": "^5.1.0",
+    "wrangler": "4.160.0"
   }
 }
